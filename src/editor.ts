@@ -1,4 +1,4 @@
-import { rotMod, textSize, vec, type Vec } from "./util";
+import { rotMod, snap, textSize, vec, type Vec } from "./util";
 
 export class TextSettings {
     constructor(public font: string, public size: number) {}
@@ -111,6 +111,16 @@ export class FileState {
         return this._codeLines;
     }
 
+    fixPos(pos: number): number {
+        if (
+            pos == this.code.length + 1 &&
+            this.code[this.code.length - 1] == "\n"
+        ) {
+            return pos - 1;
+        }
+        return pos;
+    }
+
     slice(start: number, end?: number): string {
         return this.code.slice(start, end);
     }
@@ -161,6 +171,15 @@ export class FileState {
             p += this.codeLines[i].length + 1;
         }
         return (p += x);
+    }
+
+    collapseCursor() {
+        if (
+            this.cursor.sel != undefined &&
+            this.cursor.sel == this.cursor.pos
+        ) {
+            this.cursor.sel = undefined;
+        }
     }
 
     deleteSelection() {
@@ -245,6 +264,109 @@ export class FileState {
             this.slice(0, this.cursor.pos) + this.slice(this.cursor.pos + 1);
     }
 
+    unshiftLine() {
+        const inner = (line: number): number => {
+            let space_match = this.codeLines[line].match(/^ */);
+            let spaces = space_match.length == 0 ? 0 : space_match[0].length;
+
+            let remove = rotMod(spaces, 4);
+            if (spaces == 0) {
+                remove = 0;
+            }
+
+            let lineStart = this.getPos(0, line);
+            this.code =
+                this.slice(0, lineStart) + this.slice(lineStart + remove);
+
+            return remove;
+        };
+        if (this.cursor.sel == undefined) {
+            this.cursor.move(
+                this.cursor.pos - inner(this.getXY(this.cursor.pos).y)
+            );
+        }
+
+        let swapped = this.cursor.sortSelection();
+
+        let start = this.getXY(this.cursor.pos).y;
+        let end = this.getXY(this.cursor.sel).y;
+
+        if (swapped) {
+            this.cursor.swapSelection();
+        }
+
+        let shift = 0;
+        for (let i = start; i <= end; i++) {
+            let move = inner(i);
+            shift += move;
+            if (i == start) {
+                this.cursor.move(this.cursor.pos - move, false);
+            }
+        }
+        this.cursor.sel -= shift;
+    }
+
+    enter() {
+        if (this.cursor.sel != undefined) {
+            this.deleteSelection();
+        }
+
+        let line = this.codeLines[this.getXY(this.cursor.pos).y];
+
+        let space_match = line.match(/^ */);
+        let spaces = space_match.length == 0 ? 0 : space_match[0].length;
+        console.log(spaces);
+        let new_spaces = snap(spaces, 4);
+        console.log(spaces);
+
+        if (
+            ["()", "[]", "{}"].includes(
+                this.slice(this.cursor.pos - 1, this.cursor.pos + 1)
+            )
+        ) {
+            this.write_wrap(
+                "\n" + " ".repeat(new_spaces + 4),
+                "\n" + " ".repeat(new_spaces)
+            );
+        } else {
+            this.write("\n" + " ".repeat(new_spaces));
+        }
+    }
+
+    write_wrap(a: string, b: string) {
+        if (this.cursor.sel == undefined) {
+            this.write(a);
+            let pos = this.cursor.pos;
+            this.write(b);
+            this.cursor.move(pos);
+            return;
+        }
+        let inner = this.getSelection();
+        this.deleteSelection();
+        this.write(a);
+        let sPos = this.cursor.pos;
+        this.write(inner);
+        let pos = this.cursor.pos;
+        this.write(b);
+        this.cursor.move(pos);
+        this.cursor.sel = sPos;
+    }
+
+    write_or_pass(s: string): boolean {
+        if (this.cursor.sel != undefined) {
+            this.deleteSelection();
+            this.write(s);
+            return;
+        }
+
+        if (this.slice(this.cursor.pos, this.cursor.pos + s.length) == s) {
+            this.cursor.move(this.cursor.pos + s.length);
+            return false;
+        }
+        this.write(s);
+        return true;
+    }
+
     cursorUp() {
         this.cursor.sortSelection();
         this.cursor.unselect();
@@ -309,40 +431,39 @@ export const specialKeys = (fileState: FileState) => ({
     ArrowRight: (e: KeyboardEvent) => {
         fileState.cursorRight();
     },
-    // Tab: (e: KeyboardEvent) => {
-    //     if (e.shiftKey) {
-    //         fileState.unshiftLine();
-    //         fileState = fileState;
-    //     } else {
-    //         fileState.write(" ".repeat(4 - (fileState.cursor.x % 4)));
-    //         fileState = fileState;
-    //     }
-    // },
-    // Enter: (e: KeyboardEvent) => {
-    //     fileState.enter();
-    // },
-    // "(": (e: KeyboardEvent) => {
-    //     fileState.write_wrap("(", ")");
-    // },
-    // "[": (e: KeyboardEvent) => {
-    //     fileState.write_wrap("[", "]");
-    // },
-    // "{": (e: KeyboardEvent) => {
-    //     fileState.write_wrap("{", "}");
-    // },
-    // ")": (e: KeyboardEvent) => {
-    //     fileState.write_or_pass(")");
-    // },
-    // "]": (e: KeyboardEvent) => {
-    //     fileState.write_or_pass("]");
-    // },
-    // "}": (e: KeyboardEvent) => {
-    //     fileState.write_or_pass("}");
-    // },
-    // '"': (e: KeyboardEvent) => {
-    //     fileState.write_wrap('"', '"');
-    // },
-    // Alt: (e: KeyboardEvent) => {
-    //     // console.log(getSelection());
-    // },
+    Tab: (e: KeyboardEvent) => {
+        if (e.shiftKey) {
+            fileState.unshiftLine();
+        } else {
+            let x = fileState.getXY(fileState.cursor.pos).x;
+            fileState.write(" ".repeat(4 - (x % 4)));
+        }
+    },
+    Enter: (e: KeyboardEvent) => {
+        fileState.enter();
+    },
+    "(": (e: KeyboardEvent) => {
+        fileState.write_wrap("(", ")");
+    },
+    "[": (e: KeyboardEvent) => {
+        fileState.write_wrap("[", "]");
+    },
+    "{": (e: KeyboardEvent) => {
+        fileState.write_wrap("{", "}");
+    },
+    ")": (e: KeyboardEvent) => {
+        fileState.write_or_pass(")");
+    },
+    "]": (e: KeyboardEvent) => {
+        fileState.write_or_pass("]");
+    },
+    "}": (e: KeyboardEvent) => {
+        fileState.write_or_pass("}");
+    },
+    '"': (e: KeyboardEvent) => {
+        fileState.write_wrap('"', '"');
+    },
+    Alt: (e: KeyboardEvent) => {
+        // console.log(getSelection());
+    },
 });

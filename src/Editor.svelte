@@ -10,6 +10,7 @@
     import { EMPTY_CHAR, fixedNewlineEnd, textSize } from "./util";
 
     let everything: HTMLDivElement;
+    let codeRef: HTMLPreElement;
 
     let editorData = new EditorData(
         new EditorSettings(new TextSettings("JetBrains Mono", 24))
@@ -23,6 +24,14 @@
         fileState.cursor.pos,
         editorData.settings.text
     );
+    $: cursorSelPos = fileState.posInfo(
+        fileState.cursor.sel ?? 0,
+        editorData.settings.text
+    );
+
+    // setInterval(() => {
+    //     console.log(fileState.cursor.sel);
+    // }, 100);
 </script>
 
 <svelte:window
@@ -38,13 +47,13 @@
         // fileState = fileState;
     }}
     on:keypress={e => {
+        getSelection().empty();
         e.preventDefault();
         fileState.write(e.key);
         fileState = fileState;
     }}
     on:keydown={e => {
         // selecting = Selecting.No;
-        getSelection().empty();
         let f = SPECIAL_KEYS[e.key];
         if (f != undefined) {
             e.preventDefault();
@@ -96,22 +105,31 @@
 >
     <pre
         class="code code_ref"
+        bind:this={codeRef}
         on:mousedown={e => {
             setTimeout(() => {
                 let sel = getSelection();
-                let pos = sel.anchorOffset;
 
-                // console.log(fileState.cursor == fileState.code.length);
-                if (
-                    pos == fileState.code.length + 1 &&
-                    fileState.code[fileState.code.length - 1] == "\n"
-                ) {
-                    pos -= 1;
-                }
-                fileState.cursor.move(pos);
+                fileState.cursor.move(fileState.fixPos(sel.focusOffset));
+                fileState.cursor.sel = fileState.fixPos(sel.anchorOffset);
+                fileState.collapseCursor();
+
                 fileState = fileState;
-                sel.empty();
+
+                // var range = document.createRange();
+                // range.selectNodeContents(codeRef.firstChild);
+                // getSelection().removeAllRanges();
+                // getSelection().addRange(range);
+                // getSelection().anchorNode = 0;
+                // getSelection().focusOffset = 0;
+
+                // sel.empty();
             }, 0);
+        }}
+        on:mouseup={e => {
+            let sel = getSelection();
+
+            sel.setPosition(sel.anchorNode, sel.anchorOffset);
         }}>{fixedNewlineEnd(fileState.code)}</pre>
 
     <div
@@ -121,12 +139,22 @@
         style:top={`${lineHeight * cursorPos.line}px`}
         style:left={`${cursorPos.width}px`}
     />
+    {#if fileState.cursor.sel != undefined}
+        <div
+            class="sel_cursor"
+            tabindex="-1"
+            style:height={`${lineHeight}px`}
+            style:top={`${lineHeight * cursorSelPos.line}px`}
+            style:left={`${cursorSelPos.width}px`}
+        />
+    {/if}
 
     <input type="number" bind:value={fileState.cursor.pos} />
     <br />
     {JSON.stringify([
         fileState.posInfo(fileState.cursor.pos, editorData.settings.text),
         fileState.codeLines,
+        cursorSelPos,
     ])}
 </div>
 
@@ -145,6 +173,13 @@
         pointer-events: none;
         width: 2px;
         background-color: #ecbf0b;
+        position: absolute;
+        transition: top 0.05s ease-in-out, left 0.05s ease-in-out;
+    }
+    .sel_cursor {
+        pointer-events: none;
+        width: 2px;
+        background-color: #0b83ec;
         position: absolute;
         transition: top 0.05s ease-in-out, left 0.05s ease-in-out;
     }
