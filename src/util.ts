@@ -36,7 +36,7 @@ export const textSize = (s: string, settings: TextSettings): Vec => {
 export const EMPTY_CHAR = "​";
 
 export const fixedNewlineEnd = (s: string) => {
-    if (s[s.length - 1] == "\n") {
+    if (s.length == 0 || s[s.length - 1] == "\n") {
         return s + EMPTY_CHAR;
     }
     return s;

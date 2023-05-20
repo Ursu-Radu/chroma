@@ -2,6 +2,13 @@
     import Editor from "./Editor.svelte";
 </script>
 
-<Editor />
+<div class="test">
+    <Editor />
+</div>
 
-<!-- <Test /> -->
+<style>
+    .test {
+        width: 100vw;
+        height: 100vh;
+    }
+</style>

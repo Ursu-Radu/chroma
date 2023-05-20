@@ -87,7 +87,7 @@ export class FileState {
         "vite-plugin-full-reload": "^1.0.5"
     }
 }
-    `;
+`;
     private _recalc_lines: boolean = false;
     private _codeLines: string[] = this._code.split("\n");
 
@@ -119,6 +119,25 @@ export class FileState {
             return pos - 1;
         }
         return pos;
+    }
+
+    updateSelection(codeRef: Node) {
+        let sel = getSelection();
+        if (sel == null) return;
+        if (
+            sel.anchorNode != codeRef.firstChild &&
+            sel.focusNode != codeRef.firstChild
+        )
+            return;
+
+        this.cursor.move(this.fixPos(sel.focusOffset));
+        this.cursor.sel = this.fixPos(sel.anchorOffset);
+        this.collapseCursor();
+    }
+
+    leadingSpaces(line: number): number {
+        let space_match = this.codeLines[line].match(/^ */);
+        return space_match.length == 0 ? 0 : space_match[0].length;
     }
 
     slice(start: number, end?: number): string {
@@ -208,6 +227,31 @@ export class FileState {
         return s;
     }
 
+    getSelRects(
+        settings: TextSettings
+    ): { line: number; start: number; end: number }[] {
+        if (this.cursor.sel == undefined) {
+            return [];
+        }
+        let s = this.getSelection();
+        let swapped = this.cursor.sortSelection();
+        let { x, y } = this.getXY(this.cursor.pos);
+        if (swapped) {
+            this.cursor.swapSelection();
+        }
+        return s.split("\n").map((s, i) => {
+            let start =
+                i == 0
+                    ? textSize(this.codeLines[y].slice(0, x), settings).x
+                    : 0;
+            return {
+                line: y + i,
+                start,
+                end: start + textSize(s, settings).x,
+            };
+        });
+    }
+
     write(s: string) {
         this.deleteSelection();
 
@@ -266,8 +310,7 @@ export class FileState {
 
     unshiftLine() {
         const inner = (line: number): number => {
-            let space_match = this.codeLines[line].match(/^ */);
-            let spaces = space_match.length == 0 ? 0 : space_match[0].length;
+            let spaces = this.leadingSpaces(line);
 
             let remove = rotMod(spaces, 4);
             if (spaces == 0) {
@@ -291,10 +334,6 @@ export class FileState {
         let start = this.getXY(this.cursor.pos).y;
         let end = this.getXY(this.cursor.sel).y;
 
-        if (swapped) {
-            this.cursor.swapSelection();
-        }
-
         let shift = 0;
         for (let i = start; i <= end; i++) {
             let move = inner(i);
@@ -304,6 +343,49 @@ export class FileState {
             }
         }
         this.cursor.sel -= shift;
+
+        if (swapped) {
+            this.cursor.swapSelection();
+        }
+    }
+
+    shiftLine() {
+        if (this.cursor.sel == undefined) {
+            let x = this.getXY(this.cursor.pos).x;
+            this.write(" ".repeat(4 - (x % 4)));
+            return;
+        }
+
+        let swapped = this.cursor.sortSelection();
+
+        let start = this.getXY(this.cursor.pos).y;
+        let end = this.getXY(this.cursor.sel).y;
+
+        let shift = 0;
+        for (let i = start; i <= end; i++) {
+            let spaces = this.leadingSpaces(i);
+
+            let line_start = this.getPos(0, i);
+
+            let add = 4 - (spaces % 4);
+            // console.log(spaces, add);
+
+            shift += add;
+
+            this.code =
+                this.slice(0, line_start) +
+                " ".repeat(add) +
+                this.slice(line_start);
+
+            if (i == start) {
+                this.cursor.move(this.cursor.pos + add, false);
+            }
+        }
+        this.cursor.sel += shift;
+
+        if (swapped) {
+            this.cursor.swapSelection();
+        }
     }
 
     enter() {
@@ -315,9 +397,9 @@ export class FileState {
 
         let space_match = line.match(/^ */);
         let spaces = space_match.length == 0 ? 0 : space_match[0].length;
-        console.log(spaces);
+        // console.log(spaces);
         let new_spaces = snap(spaces, 4);
-        console.log(spaces);
+        // console.log(spaces);
 
         if (
             ["()", "[]", "{}"].includes(
@@ -435,8 +517,7 @@ export const specialKeys = (fileState: FileState) => ({
         if (e.shiftKey) {
             fileState.unshiftLine();
         } else {
-            let x = fileState.getXY(fileState.cursor.pos).x;
-            fileState.write(" ".repeat(4 - (x % 4)));
+            fileState.shiftLine();
         }
     },
     Enter: (e: KeyboardEvent) => {
