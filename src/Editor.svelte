@@ -1,6 +1,7 @@
 <script lang="ts">
     import { text } from "svelte/internal";
     import {
+        Cursor,
         EditorData,
         EditorSettings,
         FileState,
@@ -15,22 +16,42 @@
     let editorData = new EditorData(
         new EditorSettings(new TextSettings("JetBrains Mono", 24))
     );
-    $: lineHeight =
-        textSize("m\n".repeat(999) + "m", editorData.settings.text).y / 1000;
 
     let fileState = new FileState();
     const SPECIAL_KEYS = specialKeys(fileState);
 
-    $: cursorPos = fileState.posInfo(
-        fileState.cursor.pos,
-        editorData.settings.text
+    $: cursorPos = fileState.cursors.map(c =>
+        fileState.posInfo(c.pos, editorData.settings.text)
     );
 
     let selecting = false;
 
+    let cursorVisible = true;
+    let cursorBlinkID = -1;
+    const startCursorBlink = () => {
+        clearInterval(cursorBlinkID);
+        cursorVisible = true;
+        cursorBlinkID = setInterval(() => {
+            cursorVisible = !cursorVisible;
+        }, 500);
+    };
+    startCursorBlink();
+    $: {
+        fileState.cursors;
+        startCursorBlink();
+    }
+
+    let measureHeight = 0;
+    $: lineHeight = measureHeight / 1000;
+
     // setInterval(() => {
     //     console.log(fileState.cursor.sel);
     // }, 100);
+
+    // $: console.log(
+    //     JSON.stringify(fileState.cursors.map(c => [c.pos, c.sel])),
+    //     JSON.stringify(fileState.getSelRects(editorData.settings.text), null, 4)
+    // );
 </script>
 
 <svelte:window
@@ -90,6 +111,11 @@
             on:mousedown={e => {
                 setTimeout(() => {
                     selecting = true;
+                    if (e.altKey) {
+                        fileState.cursors.push(new Cursor(fileState, 0));
+                    } else {
+                        fileState.cursors = [new Cursor(fileState, 0)];
+                    }
                     fileState.updateSelection(codeRef);
 
                     fileState = fileState;
@@ -106,37 +132,40 @@
                 />
             {/each}
         </div>
+
         <pre class="code code_display">{fixedNewlineEnd(fileState.code)}</pre>
 
-        <div
-            class="cursor"
-            tabindex="-1"
-            style:height={`${lineHeight}px`}
-            style:top={`${lineHeight * cursorPos.line}px`}
-            style:left={`${cursorPos.width}px`}
-        />
-        <!-- {#if fileState.cursor.sel != undefined}
+        {#each cursorPos as pos}
             <div
-                class="sel_cursor"
+                class="cursor"
                 tabindex="-1"
                 style:height={`${lineHeight}px`}
-                style:top={`${lineHeight * cursorSelPos.line}px`}
-                style:left={`${cursorSelPos.width}px`}
+                style:top={`${lineHeight * pos.line}px`}
+                style:left={`${pos.width - 0.5}px`}
+                style:opacity={cursorVisible ? 1 : 0}
             />
-        {/if} -->
+        {/each}
     </div>
+    <pre
+        class="code line_height_measure"
+        bind:offsetHeight={measureHeight}>{"m\n".repeat(999) + "m"}</pre>
 </div>
 
 <style>
     .everything {
         width: 100%;
         height: 100%;
-        position: relative;
+        overflow: hidden;
     }
     .code_area {
+        position: relative;
         width: 100%;
         height: 100%;
         overflow: scroll;
+        /* background-color: #ff000011; */
+        /* display: flex;
+        justify-content: stretch;
+        align-items: stretch; */
     }
     .code {
         font-size: var(--code-size);
@@ -145,10 +174,22 @@
         /* border-bottom: 1px solid black;
         border-top: 1px solid black; */
     }
+    .line_height_measure {
+        position: absolute;
+        pointer-events: none;
+        opacity: 0;
+    }
     .code_ref {
         position: absolute;
-        width: 100%;
-        height: 100%;
+        /* min */
+        /* min-width: max-content;
+        min-height: max-content; */
+        /* width: 100%;
+        height: 100%; */
+        height: max-content;
+        min-height: 100%;
+        width: max-content;
+        min-width: 100%;
         opacity: 0;
         user-select: text;
         background-color: #ffffff55;

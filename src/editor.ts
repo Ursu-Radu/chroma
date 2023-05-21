@@ -18,7 +18,7 @@ interface PosInfo {
     width: number;
 }
 
-class Cursor {
+export class Cursor {
     public savedX: number = 0;
 
     constructor(
@@ -60,6 +60,12 @@ class Cursor {
         }
         return false;
     }
+
+    collapse() {
+        if (this.sel != undefined && this.sel == this.pos) {
+            this.sel = undefined;
+        }
+    }
 }
 
 export class FileState {
@@ -91,7 +97,7 @@ export class FileState {
     private _recalc_lines: boolean = false;
     private _codeLines: string[] = this._code.split("\n");
 
-    public cursor: Cursor = new Cursor(this, 0);
+    public cursors: Cursor[] = [new Cursor(this, 0)];
 
     constructor() {}
 
@@ -122,17 +128,56 @@ export class FileState {
     }
 
     updateSelection(codeRef: Node) {
-        let sel = getSelection();
-        if (sel == null) return;
-        if (
-            sel.anchorNode != codeRef.firstChild &&
-            sel.focusNode != codeRef.firstChild
-        )
-            return;
+        if (this.cursors.length > 0) {
+            let sel = getSelection();
+            if (sel == null) return;
+            if (
+                sel.anchorNode != codeRef.firstChild &&
+                sel.focusNode != codeRef.firstChild
+            )
+                return;
 
-        this.cursor.move(this.fixPos(sel.focusOffset));
-        this.cursor.sel = this.fixPos(sel.anchorOffset);
-        this.collapseCursor();
+            let c = this.cursors[this.cursors.length - 1];
+            c.move(this.fixPos(sel.focusOffset));
+            c.sel = this.fixPos(sel.anchorOffset);
+            c.collapse();
+
+            this.sanitizeCursors();
+        }
+    }
+
+    sanitizeCursors() {
+        if (this.cursors.length > 1) {
+            let cursor_info = this.cursors
+                .map((c): [Cursor, boolean] => {
+                    let swapped = c.sortSelection();
+                    if (c.sel == undefined) {
+                        c.sel = c.pos;
+                    }
+                    return [c, swapped];
+                })
+                .sort((a, b) => a[0].pos - b[0].pos);
+
+            let out = [cursor_info[0]];
+            for (let i = 1; i < cursor_info.length; i++) {
+                let [c, b] = cursor_info[i];
+                let top = out[out.length - 1][0];
+                if (top.sel >= c.pos) {
+                    top.sel = c.sel;
+                } else {
+                    out.push([c, b]);
+                }
+            }
+
+            for (let [c, b] of out) {
+                if (b) {
+                    c.swapSelection();
+                }
+                c.collapse();
+            }
+
+            this.cursors = out.map(c => c[0]);
+        }
     }
 
     leadingSpaces(line: number): number {
@@ -192,305 +237,396 @@ export class FileState {
         return (p += x);
     }
 
-    collapseCursor() {
-        if (
-            this.cursor.sel != undefined &&
-            this.cursor.sel == this.cursor.pos
-        ) {
-            this.cursor.sel = undefined;
+    forEachCursor(
+        cb: (c: Cursor, i: number) => number,
+        sanitize: boolean = true
+    ) {
+        this.cursors.forEach((c, i) => {
+            this.shiftCursors(i, cb(c, i));
+        });
+        if (sanitize) {
+            this.sanitizeCursors();
         }
     }
 
-    deleteSelection() {
-        this.cursor.sortSelection();
-
-        if (this.cursor.sel != undefined) {
-            this.code =
-                this.code.slice(0, this.cursor.pos) +
-                this.code.slice(this.cursor.sel);
-
-            this.cursor.unselect();
+    shiftCursors(after: number, amount: number) {
+        if (amount != 0) {
+            for (let i = after + 1; i < this.cursors.length; i++) {
+                let c = this.cursors[i];
+                c.pos += amount;
+                if (c.sel != undefined) {
+                    c.sel += amount;
+                }
+            }
         }
     }
 
-    getSelection() {
-        if (this.cursor.sel == undefined) {
-            return "";
-        }
-        let swapped = this.cursor.sortSelection();
+    deleteSelection(cursor?: Cursor) {
+        const inner = (c: Cursor) => {
+            c.sortSelection();
 
-        let s = this.slice(this.cursor.pos, this.cursor.sel);
+            if (c.sel != undefined) {
+                let remove = c.sel - c.pos;
+                this.code = this.code.slice(0, c.pos) + this.code.slice(c.sel);
 
-        if (swapped) {
-            this.cursor.swapSelection();
+                c.unselect();
+
+                return -remove;
+            }
+            return 0;
+        };
+
+        if (cursor == undefined) {
+            this.forEachCursor(inner);
+        } else {
+            inner(cursor);
         }
-        return s;
+    }
+
+    getSelection(cursor?: Cursor): string {
+        const inner = (c: Cursor) => {
+            if (c.sel == undefined) {
+                return "";
+            }
+            let swapped = c.sortSelection();
+
+            let s = this.slice(c.pos, c.sel);
+
+            if (swapped) {
+                c.swapSelection();
+            }
+
+            return s;
+        };
+
+        if (cursor == undefined) {
+            let out = [];
+
+            this.forEachCursor(c => {
+                out.push(inner(c));
+                return 0;
+            }, false);
+
+            return out.join("\n");
+        } else {
+            return inner(cursor);
+        }
     }
 
     getSelRects(
         settings: TextSettings
     ): { line: number; start: number; end: number }[] {
-        if (this.cursor.sel == undefined) {
-            return [];
-        }
-        let s = this.getSelection();
-        let swapped = this.cursor.sortSelection();
-        let { x, y } = this.getXY(this.cursor.pos);
-        if (swapped) {
-            this.cursor.swapSelection();
-        }
-        return s.split("\n").map((s, i) => {
-            let start =
-                i == 0
-                    ? textSize(this.codeLines[y].slice(0, x), settings).x
-                    : 0;
-            return {
-                line: y + i,
-                start,
-                end: start + textSize(s, settings).x,
-            };
-        });
+        let out: { line: number; start: number; end: number }[] = [];
+
+        this.forEachCursor(c => {
+            if (c.sel == undefined) {
+                return 0;
+            }
+            let s = this.getSelection(c);
+            let swapped = c.sortSelection();
+            let { x, y } = this.getXY(c.pos);
+            if (swapped) {
+                c.swapSelection();
+            }
+            out = out.concat(
+                s.split("\n").map((s, i) => {
+                    let start =
+                        i == 0
+                            ? textSize(this.codeLines[y].slice(0, x), settings)
+                                  .x
+                            : 0;
+                    return {
+                        line: y + i,
+                        start,
+                        end: start + textSize(s, settings).x,
+                    };
+                })
+            );
+
+            return 0;
+        }, false);
+
+        return out;
     }
 
-    write(s: string) {
-        this.deleteSelection();
+    write(s: string, cursor?: Cursor) {
+        if (cursor == undefined) {
+            this.deleteSelection();
 
-        this.code =
-            this.slice(0, this.cursor.pos) + s + this.slice(this.cursor.pos);
+            this.forEachCursor(c => {
+                this.code = this.slice(0, c.pos) + s + this.slice(c.pos);
 
-        this.cursor.move(this.cursor.pos + s.length);
+                c.move(c.pos + s.length);
+
+                return s.length;
+            });
+        } else {
+            this.deleteSelection(cursor);
+
+            this.code = this.slice(0, cursor.pos) + s + this.slice(cursor.pos);
+
+            cursor.move(cursor.pos + s.length);
+        }
     }
 
     backspace() {
-        if (this.cursor.sel != undefined) {
-            this.deleteSelection();
-            return;
-        }
-        if (this.cursor.pos == 0) {
-            return;
-        }
+        this.deleteSelection();
 
-        const remove = (amount: number) => {
-            this.code =
-                this.slice(0, this.cursor.pos - amount) +
-                this.slice(this.cursor.pos);
-            this.cursor.move(this.cursor.pos - amount);
-        };
+        this.forEachCursor(c => {
+            if (c.pos == 0) {
+                return 0;
+            }
 
-        let { x, y } = this.getXY(this.cursor.pos);
-        if (x > 0 && this.codeLines[y].slice(0, x).trim() == "") {
-            remove(rotMod(x, 4));
-            return;
-        }
+            const remove = (amount: number) => {
+                this.code = this.slice(0, c.pos - amount) + this.slice(c.pos);
+                c.move(c.pos - amount);
+            };
 
-        if (
-            ["()", "[]", "{}", '""'].includes(
-                this.slice(this.cursor.pos - 1, this.cursor.pos + 1)
-            )
-        ) {
-            this.cursor.move(this.cursor.pos + 1);
-            remove(2);
-        } else {
-            remove(1);
-        }
+            let { x, y } = this.getXY(c.pos);
+            if (x > 0 && this.codeLines[y].slice(0, x).trim() == "") {
+                let amount = rotMod(x, 4);
+                remove(amount);
+                return -amount;
+            }
+
+            if (
+                ["()", "[]", "{}", '""'].includes(
+                    this.slice(c.pos - 1, c.pos + 1)
+                )
+            ) {
+                c.move(c.pos + 1);
+                remove(2);
+                return -2;
+            } else {
+                remove(1);
+                return -1;
+            }
+        });
     }
 
     delete() {
-        if (this.cursor.sel != undefined) {
-            this.deleteSelection();
-            return;
-        }
-        if (this.cursor.pos == this.code.length) {
-            return;
-        }
+        this.deleteSelection();
 
-        this.code =
-            this.slice(0, this.cursor.pos) + this.slice(this.cursor.pos + 1);
+        this.forEachCursor(c => {
+            if (c.pos == this.code.length) {
+                return 0;
+            }
+
+            this.code = this.slice(0, c.pos) + this.slice(c.pos + 1);
+
+            return -1;
+        });
     }
 
     unshiftLine() {
-        const inner = (line: number): number => {
-            let spaces = this.leadingSpaces(line);
+        this.forEachCursor(c => {
+            const inner = (line: number): number => {
+                let spaces = this.leadingSpaces(line);
 
-            let remove = rotMod(spaces, 4);
-            if (spaces == 0) {
-                remove = 0;
+                let remove = rotMod(spaces, 4);
+                if (spaces == 0) {
+                    remove = 0;
+                }
+
+                let lineStart = this.getPos(0, line);
+                this.code =
+                    this.slice(0, lineStart) + this.slice(lineStart + remove);
+
+                return remove;
+            };
+            if (c.sel == undefined) {
+                let remove = inner(this.getXY(c.pos).y);
+                c.move(c.pos - remove);
+                return -remove;
             }
 
-            let lineStart = this.getPos(0, line);
-            this.code =
-                this.slice(0, lineStart) + this.slice(lineStart + remove);
+            let swapped = c.sortSelection();
 
-            return remove;
-        };
-        if (this.cursor.sel == undefined) {
-            this.cursor.move(
-                this.cursor.pos - inner(this.getXY(this.cursor.pos).y)
-            );
-        }
+            let start = this.getXY(c.pos).y;
+            let end = this.getXY(c.sel).y;
 
-        let swapped = this.cursor.sortSelection();
-
-        let start = this.getXY(this.cursor.pos).y;
-        let end = this.getXY(this.cursor.sel).y;
-
-        let shift = 0;
-        for (let i = start; i <= end; i++) {
-            let move = inner(i);
-            shift += move;
-            if (i == start) {
-                this.cursor.move(this.cursor.pos - move, false);
+            let shift = 0;
+            for (let i = start; i <= end; i++) {
+                let move = inner(i);
+                shift += move;
+                if (i == start) {
+                    c.move(c.pos - move, false);
+                }
             }
-        }
-        this.cursor.sel -= shift;
+            c.sel -= shift;
 
-        if (swapped) {
-            this.cursor.swapSelection();
-        }
+            if (swapped) {
+                c.swapSelection();
+            }
+
+            return -shift;
+        });
     }
 
     shiftLine() {
-        if (this.cursor.sel == undefined) {
-            let x = this.getXY(this.cursor.pos).x;
-            this.write(" ".repeat(4 - (x % 4)));
-            return;
-        }
-
-        let swapped = this.cursor.sortSelection();
-
-        let start = this.getXY(this.cursor.pos).y;
-        let end = this.getXY(this.cursor.sel).y;
-
-        let shift = 0;
-        for (let i = start; i <= end; i++) {
-            let spaces = this.leadingSpaces(i);
-
-            let line_start = this.getPos(0, i);
-
-            let add = 4 - (spaces % 4);
-            // console.log(spaces, add);
-
-            shift += add;
-
-            this.code =
-                this.slice(0, line_start) +
-                " ".repeat(add) +
-                this.slice(line_start);
-
-            if (i == start) {
-                this.cursor.move(this.cursor.pos + add, false);
+        this.forEachCursor(c => {
+            if (c.sel == undefined) {
+                let x = this.getXY(c.pos).x;
+                this.write(" ".repeat(4 - (x % 4)));
+                return 4 - (x % 4);
             }
-        }
-        this.cursor.sel += shift;
 
-        if (swapped) {
-            this.cursor.swapSelection();
-        }
+            let swapped = c.sortSelection();
+
+            let start = this.getXY(c.pos).y;
+            let end = this.getXY(c.sel).y;
+
+            let shift = 0;
+            for (let i = start; i <= end; i++) {
+                let spaces = this.leadingSpaces(i);
+
+                let line_start = this.getPos(0, i);
+
+                let add = 4 - (spaces % 4);
+                // console.log(spaces, add);
+
+                shift += add;
+
+                this.code =
+                    this.slice(0, line_start) +
+                    " ".repeat(add) +
+                    this.slice(line_start);
+
+                if (i == start) {
+                    c.move(c.pos + add, false);
+                }
+            }
+            c.sel += shift;
+
+            if (swapped) {
+                c.swapSelection();
+            }
+
+            return shift;
+        });
     }
 
     enter() {
-        if (this.cursor.sel != undefined) {
-            this.deleteSelection();
-        }
-
-        let line = this.codeLines[this.getXY(this.cursor.pos).y];
-
-        let space_match = line.match(/^ */);
-        let spaces = space_match.length == 0 ? 0 : space_match[0].length;
-        // console.log(spaces);
-        let new_spaces = snap(spaces, 4);
-        // console.log(spaces);
-
-        if (
-            ["()", "[]", "{}"].includes(
-                this.slice(this.cursor.pos - 1, this.cursor.pos + 1)
-            )
-        ) {
-            this.write_wrap(
-                "\n" + " ".repeat(new_spaces + 4),
-                "\n" + " ".repeat(new_spaces)
-            );
-        } else {
-            this.write("\n" + " ".repeat(new_spaces));
-        }
-    }
-
-    write_wrap(a: string, b: string) {
-        if (this.cursor.sel == undefined) {
-            this.write(a);
-            let pos = this.cursor.pos;
-            this.write(b);
-            this.cursor.move(pos);
-            return;
-        }
-        let inner = this.getSelection();
         this.deleteSelection();
-        this.write(a);
-        let sPos = this.cursor.pos;
-        this.write(inner);
-        let pos = this.cursor.pos;
-        this.write(b);
-        this.cursor.move(pos);
-        this.cursor.sel = sPos;
+        this.forEachCursor(c => {
+            let line = this.codeLines[this.getXY(c.pos).y];
+            let space_match = line.match(/^ */);
+            let spaces = space_match.length == 0 ? 0 : space_match[0].length;
+            let new_spaces = snap(spaces, 4);
+            if (["()", "[]", "{}"].includes(this.slice(c.pos - 1, c.pos + 1))) {
+                let [a, b] = [
+                    "\n" + " ".repeat(new_spaces + 4),
+                    "\n" + " ".repeat(new_spaces),
+                ];
+                this.write_wrap(a, b, c);
+                return a.length + b.length;
+            } else {
+                this.write("\n" + " ".repeat(new_spaces), c);
+                return new_spaces + 1;
+            }
+        });
     }
 
-    write_or_pass(s: string): boolean {
-        if (this.cursor.sel != undefined) {
-            this.deleteSelection();
-            this.write(s);
-            return;
-        }
+    write_wrap(a: string, b: string, cursor?: Cursor) {
+        let inner = (c: Cursor) => {
+            if (c.sel == undefined) {
+                this.write(a, c);
+                let pos = c.pos;
+                this.write(b, c);
+                c.move(pos);
+                return a.length + b.length;
+            }
+            let inner = this.getSelection(c);
+            this.deleteSelection(c);
+            this.write(a, c);
+            let sPos = c.pos;
+            this.write(inner, c);
+            let pos = c.pos;
+            this.write(b, c);
+            c.move(pos);
+            c.sel = sPos;
+            return a.length + b.length;
+        };
 
-        if (this.slice(this.cursor.pos, this.cursor.pos + s.length) == s) {
-            this.cursor.move(this.cursor.pos + s.length);
-            return false;
+        if (cursor == undefined) {
+            this.forEachCursor(inner);
+        } else {
+            inner(cursor);
         }
-        this.write(s);
-        return true;
+    }
+
+    write_or_pass(s: string) {
+        this.forEachCursor(c => {
+            if (c.sel != undefined) {
+                let selLength = this.getSelection(c).length;
+                this.deleteSelection(c);
+                this.write(s);
+                return s.length - selLength;
+            }
+
+            if (this.slice(c.pos, c.pos + s.length) == s) {
+                c.move(c.pos + s.length);
+                return 0;
+            }
+            this.write(s, c);
+            return s.length;
+        });
     }
 
     cursorUp() {
-        this.cursor.sortSelection();
-        this.cursor.unselect();
-        let { y } = this.getXY(this.cursor.pos);
-        if (y > 0) {
-            this.cursor.pos = this.getPos(
-                Math.min(this.cursor.savedX, this.codeLines[y - 1].length),
-                y - 1
-            );
-        }
+        this.forEachCursor(c => {
+            c.sortSelection();
+            c.unselect();
+            let { y } = this.getXY(c.pos);
+            if (y > 0) {
+                c.pos = this.getPos(
+                    Math.min(c.savedX, this.codeLines[y - 1].length),
+                    y - 1
+                );
+            }
+            return 0;
+        });
     }
 
     cursorDown() {
-        this.cursor.sortSelection(true);
-        this.cursor.unselect();
-        let { y } = this.getXY(this.cursor.pos);
-        if (y < this.codeLines.length - 1) {
-            this.cursor.pos = this.getPos(
-                Math.min(this.cursor.savedX, this.codeLines[y + 1].length),
-                y + 1
-            );
-        }
+        this.forEachCursor(c => {
+            c.sortSelection(true);
+            c.unselect();
+            let { y } = this.getXY(c.pos);
+            if (y < this.codeLines.length - 1) {
+                c.pos = this.getPos(
+                    Math.min(c.savedX, this.codeLines[y + 1].length),
+                    y + 1
+                );
+            }
+            return 0;
+        });
     }
 
     cursorLeft() {
-        if (this.cursor.sel != undefined) {
-            this.cursor.sortSelection();
-            this.cursor.unselect();
-            return;
-        }
+        this.forEachCursor(c => {
+            if (c.sel != undefined) {
+                c.sortSelection();
+                c.unselect();
+                return 0;
+            }
 
-        this.cursor.move(this.cursor.pos - 1);
+            c.move(c.pos - 1);
+            return 0;
+        });
     }
 
     cursorRight() {
-        if (this.cursor.sel != undefined) {
-            this.cursor.sortSelection(true);
-            this.cursor.unselect();
-            return;
-        }
+        this.forEachCursor(c => {
+            if (c.sel != undefined) {
+                c.sortSelection(true);
+                c.unselect();
+                return 0;
+            }
 
-        this.cursor.move(this.cursor.pos + 1);
+            c.move(c.pos + 1);
+            return 0;
+        });
     }
 }
 
