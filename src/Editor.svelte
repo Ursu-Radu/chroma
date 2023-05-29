@@ -6,6 +6,7 @@
         EditorSettings,
         FileState,
         TextSettings,
+        specialCtrlKeys,
         specialKeys,
     } from "./editor";
     import { EMPTY_CHAR, fixedNewlineEnd, textSize } from "./util";
@@ -19,6 +20,7 @@
 
     let fileState = new FileState();
     const SPECIAL_KEYS = specialKeys(fileState);
+    const SPECIAL_CTRL_KEYS = specialCtrlKeys(fileState);
 
     $: cursorPos = fileState.cursors.map(c =>
         fileState.posInfo(c.pos, editorData.settings.text)
@@ -73,7 +75,13 @@
         fileState = fileState;
     }}
     on:keydown={e => {
-        let f = SPECIAL_KEYS[e.key];
+        let f = undefined;
+        if (e.ctrlKey) {
+            f = SPECIAL_CTRL_KEYS[e.key];
+        } else {
+            f = SPECIAL_KEYS[e.key];
+        }
+
         if (f != undefined) {
             e.preventDefault();
             f(e);
@@ -115,7 +123,10 @@
                         fileState.cursors.push(new Cursor(fileState, 0));
                     } else {
                         fileState.cursors = [new Cursor(fileState, 0)];
+                        fileState.mainCursor = fileState.cursors[0];
                     }
+                    fileState.activeCursor =
+                        fileState.cursors[fileState.cursors.length - 1];
                     fileState.updateSelection(codeRef);
 
                     fileState = fileState;
@@ -135,13 +146,24 @@
 
         <pre class="code code_display">{fixedNewlineEnd(fileState.code)}</pre>
 
-        {#each cursorPos as pos}
+        {#each cursorPos as pos, i}
             <div
-                class="cursor"
+                class={`cursor ${
+                    fileState.activeCursor == fileState.cursors[i]
+                        ? "active_cursor"
+                        : ""
+                } ${
+                    fileState.mainCursor == fileState.cursors[i]
+                        ? "main_cursor"
+                        : ""
+                }`}
                 tabindex="-1"
                 style:height={`${lineHeight}px`}
                 style:top={`${lineHeight * pos.line}px`}
-                style:left={`${pos.width - 0.5}px`}
+                style:left={`${
+                    pos.width -
+                    (fileState.mainCursor == fileState.cursors[i] ? 3 : 0.5)
+                }px`}
                 style:opacity={cursorVisible ? 1 : 0}
             />
         {/each}
@@ -208,7 +230,16 @@
         pointer-events: none;
         width: 2px;
         background-color: #ecbf0b;
-        transition: top 0.05s ease-in-out, left 0.05s ease-in-out;
+        transition: top 0.05s ease-in-out, left 0.05s ease-in-out,
+            opacity 0.05s ease-in-out;
+        border-radius: 10px;
+    }
+    .active_cursor {
+        background-color: #1aec0b;
+    }
+    .main_cursor {
+        width: 6px;
+        /* box-shadow: 0 0 3px #3e9fff; */
     }
 
     .sel_rects {

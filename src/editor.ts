@@ -61,6 +61,15 @@ export class Cursor {
         return false;
     }
 
+    sorted(rev: boolean = false): { pos: number; sel: number } {
+        let swapped = this.sortSelection(rev);
+        let ret = { pos: this.pos, sel: this.sel };
+        if (swapped) {
+            this.swapSelection();
+        }
+        return ret;
+    }
+
     collapse() {
         if (this.sel != undefined && this.sel == this.pos) {
             this.sel = undefined;
@@ -98,6 +107,8 @@ export class FileState {
     private _codeLines: string[] = this._code.split("\n");
 
     public cursors: Cursor[] = [new Cursor(this, 0)];
+    public activeCursor: Cursor = this.cursors[0];
+    public mainCursor: Cursor = this.cursors[0];
 
     constructor() {}
 
@@ -137,10 +148,9 @@ export class FileState {
             )
                 return;
 
-            let c = this.cursors[this.cursors.length - 1];
-            c.move(this.fixPos(sel.focusOffset));
-            c.sel = this.fixPos(sel.anchorOffset);
-            c.collapse();
+            this.activeCursor.move(this.fixPos(sel.focusOffset));
+            this.activeCursor.sel = this.fixPos(sel.anchorOffset);
+            this.activeCursor.collapse();
 
             this.sanitizeCursors();
         }
@@ -162,8 +172,18 @@ export class FileState {
             for (let i = 1; i < cursor_info.length; i++) {
                 let [c, b] = cursor_info[i];
                 let top = out[out.length - 1][0];
-                if (top.sel >= c.pos) {
+
+                let single = top.sel == top.pos || c.sel == c.pos;
+                let merge = single ? top.sel >= c.pos : top.sel > c.pos;
+
+                if (merge) {
                     top.sel = c.sel;
+                    if (c == this.activeCursor) {
+                        this.activeCursor = top;
+                    }
+                    if (c == this.mainCursor) {
+                        this.mainCursor = top;
+                    }
                 } else {
                     out.push([c, b]);
                 }
@@ -261,7 +281,7 @@ export class FileState {
         }
     }
 
-    deleteSelection(cursor?: Cursor) {
+    deleteSelection(cursor?: Cursor): number {
         const inner = (c: Cursor) => {
             c.sortSelection();
 
@@ -278,8 +298,9 @@ export class FileState {
 
         if (cursor == undefined) {
             this.forEachCursor(inner);
+            return;
         } else {
-            inner(cursor);
+            return inner(cursor);
         }
     }
 
@@ -370,9 +391,12 @@ export class FileState {
     }
 
     backspace() {
-        this.deleteSelection();
-
         this.forEachCursor(c => {
+            let delSel = this.deleteSelection(c);
+            if (delSel != 0) {
+                return delSel;
+            }
+
             if (c.pos == 0) {
                 return 0;
             }
@@ -467,7 +491,7 @@ export class FileState {
         this.forEachCursor(c => {
             if (c.sel == undefined) {
                 let x = this.getXY(c.pos).x;
-                this.write(" ".repeat(4 - (x % 4)));
+                this.write(" ".repeat(4 - (x % 4)), c);
                 return 4 - (x % 4);
             }
 
@@ -680,7 +704,67 @@ export const specialKeys = (fileState: FileState) => ({
     '"': (e: KeyboardEvent) => {
         fileState.write_wrap('"', '"');
     },
-    Alt: (e: KeyboardEvent) => {
-        // console.log(getSelection());
+    Escape: (e: KeyboardEvent) => {
+        fileState.cursors = [fileState.mainCursor];
+        fileState.activeCursor = fileState.mainCursor;
+    },
+});
+export const specialCtrlKeys = (fileState: FileState) => ({
+    d: (e: KeyboardEvent) => {
+        if (fileState.cursors.length == 0) {
+            return;
+        }
+        let s = "";
+        for (let c of fileState.cursors) {
+            if (c.sel == undefined) {
+                return;
+            }
+            let sel = fileState.getSelection(c);
+            if (s == "") {
+                s = sel;
+            } else if (s != sel) {
+                return;
+            }
+        }
+        const search = (code: string, start: number): boolean => {
+            let from = start;
+            while (true) {
+                let find = code.indexOf(s, from);
+                if (find == -1) {
+                    return false;
+                } else {
+                    if (
+                        !fileState.cursors.some(c => {
+                            let sorted = c.sorted();
+                            return (
+                                sorted.pos == find &&
+                                sorted.sel == find + s.length
+                            );
+                        })
+                    ) {
+                        console.log(from, find);
+                        let newCursor = new Cursor(
+                            fileState,
+                            find + s.length,
+                            find
+                        );
+                        fileState.cursors.push(newCursor);
+                        fileState.activeCursor = newCursor;
+                        return true;
+                    }
+                    from = find + s.length;
+                }
+            }
+        };
+
+        let cutCode = fileState.code.slice(0, fileState.activeCursor.pos);
+        let from = fileState.activeCursor.sorted().sel;
+        if (search(fileState.code, from)) {
+            return;
+        }
+        if (search(cutCode, 0)) {
+            return;
+        }
+        fileState.sanitizeCursors();
     },
 });
