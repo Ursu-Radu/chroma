@@ -9,13 +9,16 @@
         specialCtrlKeys,
         specialKeys,
     } from "./editor";
-    import { EMPTY_CHAR, fixedNewlineEnd, textSize } from "./util";
+    import { EMPTY_CHAR, codeDisplayStr, textSize } from "./util";
+    import { highlightCode } from "./highlighting";
+    import lang from "./langs/lang_defs/rust";
+    import { langElemColor } from "./langs/lang";
 
     let everything: HTMLDivElement;
     let codeRef: HTMLPreElement;
 
     let editorData = new EditorData(
-        new EditorSettings(new TextSettings("JetBrains Mono", 24))
+        new EditorSettings(new TextSettings("JetBrains Mono", 18))
     );
 
     let fileState = new FileState();
@@ -54,6 +57,8 @@
     //     JSON.stringify(fileState.cursors.map(c => [c.pos, c.sel])),
     //     JSON.stringify(fileState.getSelRects(editorData.settings.text), null, 4)
     // );
+
+    $: syntaxElements = highlightCode(fileState.code, lang);
 </script>
 
 <svelte:window
@@ -131,7 +136,7 @@
 
                     fileState = fileState;
                 }, 0);
-            }}>{fixedNewlineEnd(fileState.code)}</pre>
+            }}>{codeDisplayStr(fileState.code)}</pre>
         <div class="sel_rects">
             {#each fileState.getSelRects(editorData.settings.text) as rect}
                 <div
@@ -144,7 +149,15 @@
             {/each}
         </div>
 
-        <pre class="code code_display">{fixedNewlineEnd(fileState.code)}</pre>
+        <pre class="code code_display">{codeDisplayStr(fileState.code)}</pre>
+        <div class="syntax_highlighting">
+            {#each syntaxElements as elem}
+                <pre
+                    class="code"
+                    style:color={langElemColor(elem.elem)}>{elem.text}</pre>
+            {/each}
+            <!--  -->
+        </div>
 
         {#each cursorPos as pos, i}
             <div
@@ -222,7 +235,21 @@
         width: 100%;
         height: 100%;
         pointer-events: none;
+        opacity: 0;
+        -webkit-text-stroke: 2px lime;
         /* border: 1px solid red; */
+    }
+
+    .syntax_highlighting {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        font-size: 0;
+    }
+    .syntax_highlighting > * {
+        display: inline;
+        /* opacity: 0; */
     }
 
     .cursor {

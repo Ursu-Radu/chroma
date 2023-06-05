@@ -78,28 +78,39 @@ export class Cursor {
 }
 
 export class FileState {
-    private _code: string = `{
-    "name": "chroma",
-    "private": true,
-    "version": "0.0.0",
-    "type": "module",
-    "scripts": {
-        "dev": "vite",
-        "build": "vite build",
-        "preview": "vite preview",
-        "check": "svelte-check --tsconfig ./tsconfig.json"
-    },
-    "devDependencies": {
-        "@sveltejs/vite-plugin-svelte": "^2.0.3",
-        "@tsconfig/svelte": "^4.0.1",
-        "svelte": "^3.57.0",
-        "svelte-check": "^2.10.3",
-        "tslib": "^2.5.0",
-        "typescript": "^5.0.2",
-        "vite": "^4.3.2"
-    },
-    "dependencies": {
-        "vite-plugin-full-reload": "^1.0.5"
+    private _code: string = `
+impl System {
+    pub(crate) fn add_trigger(&mut self, context: GroupID, trigger: Trigger) {
+        let v = self.groups.entry(context).or_insert(vec![]);
+        v.push(trigger);
+    }
+
+    pub(crate) fn to_objects(&self) -> Vec<GDObject> {
+        let mut x = 15.0;
+        let mut row = 0;
+
+        let mut objs = vec![];
+        for (g, triggers) in &self.groups {
+            for t in triggers {
+                objs.push(
+                    t.to_obj()
+                        .with_groups(vec![*g])
+                        .with_x(x)
+                        .with_y(TRIGGER_Y - row as f64 * 30.0),
+                );
+                x += TRIGGER_SPACING;
+                row = (row + 1) % TRIGGER_ROWS;
+            }
+        }
+
+        objs.push(obj!(
+            ID: 1268,
+            TARGET_GROUP: GroupID::start(),
+            X: 1.0,
+            Y: TRIGGER_Y + 30.0,
+        ));
+
+        objs
     }
 }
 `;
@@ -349,8 +360,9 @@ export class FileState {
             if (swapped) {
                 c.swapSelection();
             }
+            let lines = s.split("\n");
             out = out.concat(
-                s.split("\n").map((s, i) => {
+                lines.map((s, i) => {
                     let start =
                         i == 0
                             ? textSize(this.codeLines[y].slice(0, x), settings)
@@ -359,7 +371,12 @@ export class FileState {
                     return {
                         line: y + i,
                         start,
-                        end: start + textSize(s, settings).x,
+                        end:
+                            start +
+                            textSize(
+                                s + (i < lines.length - 1 ? " " : ""),
+                                settings
+                            ).x,
                     };
                 })
             );
@@ -742,7 +759,6 @@ export const specialCtrlKeys = (fileState: FileState) => ({
                             );
                         })
                     ) {
-                        console.log(from, find);
                         let newCursor = new Cursor(
                             fileState,
                             find + s.length,

@@ -29,15 +29,18 @@ export const textSize = (s: string, settings: TextSettings): Vec => {
 
     let rect = MEASURE_PRE.getBoundingClientRect();
     let size = vec(rect.width, rect.height);
-
+    // "                                                      "
+    // "                                                      "
     return size;
 };
 
 export const EMPTY_CHAR = "​";
 
-export const fixedNewlineEnd = (s: string) => {
+export const codeDisplayStr = (s: string) => {
+    let out = s;
     if (s.length == 0 || s[s.length - 1] == "\n") {
-        return s + EMPTY_CHAR;
+        out += EMPTY_CHAR;
     }
-    return s;
+    // out = out.replaceAll(" ", " ");
+    return out;
 };

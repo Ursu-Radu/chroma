@@ -1,0 +1,11 @@
+{
+    "extensions": ["rs"],
+
+    "highlighting": {
+        "keywords": {
+            "patterns": {
+                "match": 2
+            }
+        }
+    }
+}
