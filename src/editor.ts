@@ -1,7 +1,11 @@
 import { rotMod, snap, textSize, vec, type Vec } from "./util";
 
 export class TextSettings {
-    constructor(public font: string, public size: number) {}
+    constructor(
+        public font: string,
+        public size: number,
+        public weight: number
+    ) {}
 }
 
 export class EditorSettings {

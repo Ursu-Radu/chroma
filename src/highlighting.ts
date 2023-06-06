@@ -5,6 +5,7 @@ import {
     type LangElem,
     type Pattern,
     MatchPattern,
+    type LangMatch,
 } from "./langs/lang";
 
 class SyntaxElement {
@@ -27,30 +28,45 @@ class SyntaxElement {
 export const highlightCode = (code: string, lang: LangDef): SyntaxElement[] => {
     type LeafPattern = BlockPattern | MatchPattern;
 
-    function* patternGen(
+    function* matchGen(
         patterns: Pattern[]
-    ): Generator<LeafPattern, void, unknown> {
+    ): Generator<[LangMatch, LeafPattern], void, unknown> {
         for (let p of patterns) {
             if (p instanceof IncludePattern) {
                 if (p.include == "@self") {
-                    yield* patternGen(lang.patterns);
+                    yield* matchGen(lang.patterns);
                 } else {
-                    let includes = [];
+                    let includes: Pattern[] = [];
                     for (let i of p.include) {
                         if (lang.patternMap[i] != undefined) {
-                            includes.push(lang.patternMap[i]);
+                            includes.push(...lang.patternMap[i]);
                         }
                     }
-                    yield* patternGen(includes);
+                    yield* matchGen(includes);
                 }
             } else {
-                yield p;
+                if (p instanceof MatchPattern) {
+                    yield [{ regex: p.match, elem: p.elem }, p];
+                } else {
+                    yield [p.begin, p];
+                }
             }
         }
     }
     let stack: BlockPattern[] = [];
 
     let elems: SyntaxElement[] = [];
+    const pushElem = (elem: SyntaxElement) => {
+        if (elems.length == 0) {
+            elems.push(elem);
+            return;
+        }
+        if (elems[elems.length - 1].elem == elem.elem) {
+            elems[elems.length - 1].text += elem.text;
+            return;
+        }
+        elems.push(elem);
+    };
 
     while (code.length > 0) {
         let patterns =
@@ -84,11 +100,8 @@ export const highlightCode = (code: string, lang: LangDef): SyntaxElement[] => {
             }
         };
 
-        for (let p of patternGen(patterns)) {
-            let match: [RegExpMatchArray, LangElem] =
-                p instanceof MatchPattern
-                    ? [code.match(p.match), p.elem]
-                    : [code.match(p.begin.match), p.begin.elem];
+        for (let [m, p] of matchGen(patterns)) {
+            let match: SyntaxMatch = [code.match(m.regex), m.elem];
             setNearest(match, p, false);
             if (nearest != null && nearest.index == 0) {
                 break;
@@ -96,23 +109,23 @@ export const highlightCode = (code: string, lang: LangDef): SyntaxElement[] => {
         }
         if (stack.length > 0) {
             let top = stack[stack.length - 1];
-            let match: [RegExpMatchArray, LangElem] = [
-                code.match(top.end.match),
-                top.end.elem,
-            ];
+            let match: SyntaxMatch = [code.match(top.end.regex), top.end.elem];
             setNearest(match, top, true);
         }
 
+        let defaultElem =
+            stack.length > 0 ? stack[stack.length - 1].elem : null;
+
         if (nearest == null) {
-            elems.push(new SyntaxElement(null, code));
+            pushElem(new SyntaxElement(defaultElem, code));
             code = "";
         } else {
             if (nearest.index > 0) {
-                elems.push(
-                    new SyntaxElement(null, code.slice(0, nearest.index))
+                pushElem(
+                    new SyntaxElement(defaultElem, code.slice(0, nearest.index))
                 );
             }
-            elems.push(
+            pushElem(
                 new SyntaxElement(
                     nearest.elem,
                     code.slice(nearest.index, nearest.index + nearest.length)

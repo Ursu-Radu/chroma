@@ -1,0 +1,96 @@
+{
+    "highlighting": {
+        "text": {
+            "color": "#9DA1B2"
+        },
+
+        "symbol.language": {
+            "color": "#83D2F3"
+        },
+        "symbol.operator": {
+            "color": "#BD8CDF"
+        },
+        "keyword.control": {
+            "color": "#83D2F3",
+            "italic": true
+        },
+        "keyword.modifier": {
+            "color": "#BD8CDF"
+        },
+        "keyword.decl": {
+            "color": "#EB8668"
+        },
+        "keyword.operator": {
+            "color": "#BD8CDF"
+        },
+        "keyword.other": {
+            "color": "#BD8CDF"
+        },
+        "type": {
+            "color": "#F8CD71"
+        },
+        "comment.line": {
+            "color": "#9DA1B277",
+            "italic": true
+        },
+        "comment.block": {
+            "color": "#9DA1B277",
+            "italic": true
+        },
+        "string.single": {
+            "color": "#B9DD87"
+        },
+        "string.double": {
+            "color": "#B9DD87"
+        },
+        "string.regex": {
+            "color": "#9ED7BC"
+        },
+        "string.other": {
+            "color": "#B9DD87"
+        },
+        "string.escape": {
+            "color": "#83D2F3"
+        },
+        "constant.number": {
+            "color": "#EB8668"
+        },
+        "constant.language": {
+            "color": "#EB8668"
+        },
+        "constant.other": {
+            "color": "#EB8668"
+        },
+        "markup.bold": {
+            "bold": true
+        },
+        "markup.underline": {
+            "underline": true
+        },
+        "markup.italic": {
+            "italic": true
+        },
+        "markup.strikethrough": {
+            "strikethrough": true
+        },
+        "variable.param": {
+            "color": "#FE526F"
+        },
+        "variable.language": {
+            "color": "#FE526F"
+        },
+        "variable.function": {
+            "color": "#7DA3F3"
+        },
+        "variable.other": {
+            "color": "#CC8492"
+        },
+        "invalid.illegal": {
+            "color": "#ff0000"
+        },
+        "invalid.deprecated": {
+            "color": "#aa0000",
+            "strikethrough": true
+        }
+    }
+}

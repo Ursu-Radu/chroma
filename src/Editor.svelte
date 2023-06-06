@@ -12,13 +12,13 @@
     import { EMPTY_CHAR, codeDisplayStr, textSize } from "./util";
     import { highlightCode } from "./highlighting";
     import lang from "./langs/lang_defs/rust";
-    import { langElemColor } from "./langs/lang";
+    import { langElemStyling } from "./langs/lang";
 
     let everything: HTMLDivElement;
     let codeRef: HTMLPreElement;
 
     let editorData = new EditorData(
-        new EditorSettings(new TextSettings("JetBrains Mono", 18))
+        new EditorSettings(new TextSettings("JetBrains Mono", 18, 650))
     );
 
     let fileState = new FileState();
@@ -59,6 +59,7 @@
     // );
 
     $: syntaxElements = highlightCode(fileState.code, lang);
+    // $: syntaxElements = [];
 </script>
 
 <svelte:window
@@ -114,6 +115,7 @@
     style={`
     --code-font: "${editorData.settings.text.font}", monospace;
     --code-size: ${editorData.settings.text.size}px;
+    --code-weight: ${editorData.settings.text.weight};
 `}
     bind:this={everything}
 >
@@ -154,7 +156,9 @@
             {#each syntaxElements as elem}
                 <pre
                     class="code"
-                    style:color={langElemColor(elem.elem)}>{elem.text}</pre>
+                    style={langElemStyling(
+                        elem.elem
+                    ).getCss()}>{elem.text}</pre>
             {/each}
             <!--  -->
         </div>
@@ -205,6 +209,7 @@
     .code {
         font-size: var(--code-size);
         font-family: var(--code-font);
+        font-weight: var(--code-weight);
         /* background-color: #222222; */
         /* border-bottom: 1px solid black;
         border-top: 1px solid black; */

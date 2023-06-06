@@ -3,8 +3,6 @@
 </script>
 
 <div class="test">
-    <!-- <pre>{"cockle\nhe "}</pre>
-    <pre>{"bo"}</pre> -->
     <Editor />
 </div>
 
