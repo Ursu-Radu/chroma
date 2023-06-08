@@ -103,4 +103,7 @@ export class LangDef {
         this.patterns.push(...pattern);
         this.patternMap[name] = pattern;
     }
+    addNonRootPattern(name: string, ...pattern: Pattern[]) {
+        this.patternMap[name] = pattern;
+    }
 }

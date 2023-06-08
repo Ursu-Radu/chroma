@@ -1,9 +1,12 @@
 import { BlockPattern, IncludePattern, LangDef, MatchPattern } from "../lang";
 
-let lang = new LangDef("rust", ["rs"]);
+let rustLang = new LangDef("Rust", ["rs"]);
 
-lang.addPattern("line_comments", new MatchPattern(/\/\/.*/, "comment.line"));
-lang.addPattern(
+rustLang.addPattern(
+    "line_comments",
+    new MatchPattern(/\/\/.*/, "comment.line")
+);
+rustLang.addPattern(
     "block_comments",
     new BlockPattern(
         { regex: /\/\*/, elem: "comment.block" },
@@ -12,11 +15,11 @@ lang.addPattern(
         [new IncludePattern(["block_comments"])]
     )
 );
-lang.addPattern(
+rustLang.addPattern(
     "lifetimes",
     new MatchPattern(/(['])([a-zA-Z_][0-9a-zA-Z_]*)(?!['])\b/, "type")
 );
-lang.addPattern(
+rustLang.addPattern(
     "strings",
     new BlockPattern(
         { regex: /(b?)(r#*)?(\")/, elem: "string.double" },
@@ -36,20 +39,20 @@ lang.addPattern(
         []
     )
 );
-lang.addPattern("constants", new MatchPattern(/\b[A-Z]{2,}\b/, null));
-lang.addPattern(
+rustLang.addPattern("constants", new MatchPattern(/\b[A-Z]{2,}\b/, null));
+rustLang.addPattern(
     "keywords",
     new MatchPattern(
         /\b(break|continue|else|for|if|in|loop|match|return|while|async|await|do|yield|try)\b/,
         "keyword.control"
     ),
     new MatchPattern(
-        /\b(crate|enum|fn|impl|let|mod|struct|trait|type|use|macro|union)\b/,
+        /\b(const|crate|enum|fn|impl|let|mod|struct|trait|type|use|macro|union)\b/,
         "keyword.decl"
     ),
 
     new MatchPattern(
-        /\b(const|extern|move|mut|pub|ref|static|where|dyn|abstract|become|box|final|override|priv|unsized|virtual)\b/,
+        /\b(extern|move|mut|pub|ref|static|where|dyn|abstract|become|box|final|override|priv|unsized|virtual)\b/,
         "keyword.modifier"
     ),
 
@@ -60,7 +63,7 @@ lang.addPattern(
 
     new MatchPattern(/\b(self|Self|super)\b/, "variable.language")
 );
-lang.addPattern(
+rustLang.addPattern(
     "symbols",
     new MatchPattern(/[()]/, "symbol.language"),
     new MatchPattern(/[[\]]|#\[/, "symbol.language"),
@@ -68,23 +71,23 @@ lang.addPattern(
 
     new MatchPattern(/[,;:.]|=>|->/, "symbol.language"),
     new MatchPattern(/ [<>] |<=|>=/, "symbol.operator"),
-    new MatchPattern(/[+\-*/%&@~=]/, "symbol.operator"),
+    new MatchPattern(/[+\-*/%&@~=!?]/, "symbol.operator"),
     new MatchPattern(/[<>]/, "symbol.language")
 );
-lang.addPattern(
+rustLang.addPattern(
     "types",
     new MatchPattern(
-        /(?<![A-Za-z])(f32|f64|i128|i16|i32|i64|i8|isize|u128|u16|u32|u64|u8|usize)\b|bool|char|str/,
+        /(?<![A-Za-z])(f32|f64|i128|i16|i32|i64|i8|isize|u128|u16|u32|u64|u8|usize|bool|char|str)\b/,
         "type"
     ),
     new MatchPattern(/\b[A-Z][A-Za-z0-9]*\b/, "type")
 );
-lang.addPattern(
+rustLang.addPattern(
     "calls",
     new MatchPattern(/[A-z_]\w*(?=\s*\()/, "variable.function"),
     new MatchPattern(/[A-z_]\w*\s*\!/, "variable.function")
 );
-lang.addPattern(
+rustLang.addPattern(
     "numbers",
     new MatchPattern(
         /\b\d[\d_]*(\.?)[\d_]*(?:(E)([+-])([\d_]+))?(f32|f64|i128|i16|i32|i64|i8|isize|u128|u16|u32|u64|u8|usize)?\b/,
@@ -104,4 +107,4 @@ lang.addPattern(
     )
 );
 
-export default lang;
+export default rustLang;

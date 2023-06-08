@@ -77,7 +77,8 @@
             "color": "#FE526F"
         },
         "variable.language": {
-            "color": "#FE526F"
+            "color": "#FE526F",
+            "italic": true
         },
         "variable.function": {
             "color": "#7DA3F3"

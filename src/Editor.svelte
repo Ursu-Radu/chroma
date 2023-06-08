@@ -11,8 +11,9 @@
     } from "./editor";
     import { EMPTY_CHAR, codeDisplayStr, textSize } from "./util";
     import { highlightCode } from "./highlighting";
-    import lang from "./langs/lang_defs/rust";
+    import rustLang from "./langs/lang_defs/rust";
     import { langElemStyling } from "./langs/lang";
+    import jsLang from "./langs/lang_defs/js";
 
     let everything: HTMLDivElement;
     let codeRef: HTMLPreElement;
@@ -58,7 +59,7 @@
     //     JSON.stringify(fileState.getSelRects(editorData.settings.text), null, 4)
     // );
 
-    $: syntaxElements = highlightCode(fileState.code, lang);
+    $: syntaxElements = highlightCode(fileState.code, jsLang);
     // $: syntaxElements = [];
 </script>
 
