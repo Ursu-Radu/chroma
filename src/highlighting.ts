@@ -6,7 +6,7 @@ import {
     type Pattern,
     MatchPattern,
     type LangMatch,
-} from "./langs/lang";
+} from "./langs/lang_def";
 
 class SyntaxElement {
     constructor(public elem: LangElem, public text: string) {}

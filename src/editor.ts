@@ -618,10 +618,8 @@ impl System {
         });
     }
 
-    cursorUp() {
-        this.forEachCursor(c => {
-            c.sortSelection();
-            c.unselect();
+    cursorUp(shift: boolean) {
+        const move = (c: Cursor) => {
             let { y } = this.getXY(c.pos);
             if (y > 0) {
                 c.pos = this.getPos(
@@ -629,14 +627,28 @@ impl System {
                     y - 1
                 );
             }
-            return 0;
-        });
+        };
+
+        if (!shift) {
+            this.forEachCursor(c => {
+                c.sortSelection();
+                c.unselect();
+                move(c);
+                c.collapse();
+                return 0;
+            });
+        } else {
+            this.forEachCursor(c => {
+                c.sel ??= c.pos;
+                move(c);
+                c.collapse();
+                return 0;
+            });
+        }
     }
 
-    cursorDown() {
-        this.forEachCursor(c => {
-            c.sortSelection(true);
-            c.unselect();
+    cursorDown(shift: boolean) {
+        const move = (c: Cursor) => {
             let { y } = this.getXY(c.pos);
             if (y < this.codeLines.length - 1) {
                 c.pos = this.getPos(
@@ -644,103 +656,132 @@ impl System {
                     y + 1
                 );
             }
-            return 0;
-        });
-    }
+        };
 
-    cursorLeft() {
-        this.forEachCursor(c => {
-            if (c.sel != undefined) {
+        if (!shift) {
+            this.forEachCursor(c => {
                 c.sortSelection();
                 c.unselect();
+                move(c);
+                c.collapse();
                 return 0;
-            }
-
-            c.move(c.pos - 1);
-            return 0;
-        });
-    }
-
-    cursorRight() {
-        this.forEachCursor(c => {
-            if (c.sel != undefined) {
-                c.sortSelection(true);
-                c.unselect();
-                return 0;
-            }
-
-            c.move(c.pos + 1);
-            return 0;
-        });
-    }
-}
-
-export const specialKeys = (fileState: FileState) => ({
-    Backspace: (e: KeyboardEvent) => {
-        fileState.backspace();
-    },
-    Delete: (e: KeyboardEvent) => {
-        fileState.delete();
-    },
-    ArrowUp: (e: KeyboardEvent) => {
-        fileState.cursorUp();
-    },
-    ArrowDown: (e: KeyboardEvent) => {
-        fileState.cursorDown();
-    },
-    ArrowLeft: (e: KeyboardEvent) => {
-        fileState.cursorLeft();
-    },
-    ArrowRight: (e: KeyboardEvent) => {
-        fileState.cursorRight();
-    },
-    Tab: (e: KeyboardEvent) => {
-        if (e.shiftKey) {
-            fileState.unshiftLine();
+            });
         } else {
-            fileState.shiftLine();
+            this.forEachCursor(c => {
+                c.sel ??= c.pos;
+                move(c);
+                c.collapse();
+                return 0;
+            });
         }
-    },
-    Enter: (e: KeyboardEvent) => {
-        fileState.enter();
-    },
-    "(": (e: KeyboardEvent) => {
-        fileState.write_wrap("(", ")");
-    },
-    "[": (e: KeyboardEvent) => {
-        fileState.write_wrap("[", "]");
-    },
-    "{": (e: KeyboardEvent) => {
-        fileState.write_wrap("{", "}");
-    },
-    ")": (e: KeyboardEvent) => {
-        fileState.write_or_pass(")");
-    },
-    "]": (e: KeyboardEvent) => {
-        fileState.write_or_pass("]");
-    },
-    "}": (e: KeyboardEvent) => {
-        fileState.write_or_pass("}");
-    },
-    '"': (e: KeyboardEvent) => {
-        fileState.write_wrap('"', '"');
-    },
-    Escape: (e: KeyboardEvent) => {
-        fileState.cursors = [fileState.mainCursor];
-        fileState.activeCursor = fileState.mainCursor;
-    },
-});
-export const specialCtrlKeys = (fileState: FileState) => ({
-    d: (e: KeyboardEvent) => {
-        if (fileState.cursors.length == 0) {
+    }
+
+    cursorLeft(shift: boolean) {
+        if (!shift) {
+            this.forEachCursor(c => {
+                if (c.sel != undefined) {
+                    c.sortSelection();
+                    c.unselect();
+                    return 0;
+                }
+
+                c.move(c.pos - 1);
+                return 0;
+            });
+        } else {
+            this.forEachCursor(c => {
+                c.sel ??= c.pos;
+                c.move(c.pos - 1, false);
+                c.collapse();
+                return 0;
+            });
+        }
+    }
+
+    cursorRight(shift: boolean) {
+        if (!shift) {
+            this.forEachCursor(c => {
+                if (c.sel != undefined) {
+                    c.sortSelection(true);
+                    c.unselect();
+                    return 0;
+                }
+
+                c.move(c.pos + 1);
+                return 0;
+            });
+        } else {
+            this.forEachCursor(c => {
+                c.sel ??= c.pos;
+                c.move(c.pos + 1, false);
+                c.collapse();
+                return 0;
+            });
+        }
+    }
+
+    cursorHome(shift: boolean) {
+        const move = (c: Cursor) => {
+            let { x, y } = this.getXY(c.pos);
+            let spaces = this.leadingSpaces(y);
+            if (x < spaces) {
+                c.move(c.pos + spaces - x, false);
+            } else if (x == spaces) {
+                c.move(c.pos - spaces, false);
+            } else {
+                c.move(c.pos - (x - spaces), false);
+            }
+        };
+
+        if (!shift) {
+            this.forEachCursor(c => {
+                c.unselect();
+                move(c);
+
+                return 0;
+            });
+        } else {
+            this.forEachCursor(c => {
+                c.sel ??= c.pos;
+                move(c);
+                return 0;
+            });
+        }
+    }
+
+    cursorEnd(shift: boolean) {
+        const move = (c: Cursor) => {
+            let { x, y } = this.getXY(c.pos);
+            let lineLength = this.codeLines[y].length;
+            c.move(c.pos + lineLength - x, false);
+        };
+
+        if (!shift) {
+            this.forEachCursor(c => {
+                c.unselect();
+                move(c);
+
+                return 0;
+            });
+        } else {
+            this.forEachCursor(c => {
+                c.sel ??= c.pos;
+                move(c);
+                return 0;
+            });
+        }
+    }
+
+    findNext() {
+        if (this.cursors.length == 0) {
             return;
         }
         let s = "";
-        for (let c of fileState.cursors) {
+        for (let c of this.cursors) {
             if (c.sel == undefined) {
                 return;
             }
-            let sel = fileState.getSelection(c);
+            let sel = this.getSelection(c);
             if (s == "") {
                 s = sel;
             } else if (s != sel) {
@@ -755,7 +796,7 @@ export const specialCtrlKeys = (fileState: FileState) => ({
                     return false;
                 } else {
                     if (
-                        !fileState.cursors.some(c => {
+                        !this.cursors.some(c => {
                             let sorted = c.sorted();
                             return (
                                 sorted.pos == find &&
@@ -763,13 +804,9 @@ export const specialCtrlKeys = (fileState: FileState) => ({
                             );
                         })
                     ) {
-                        let newCursor = new Cursor(
-                            fileState,
-                            find + s.length,
-                            find
-                        );
-                        fileState.cursors.push(newCursor);
-                        fileState.activeCursor = newCursor;
+                        let newCursor = new Cursor(this, find + s.length, find);
+                        this.cursors.push(newCursor);
+                        this.activeCursor = newCursor;
                         return true;
                     }
                     from = find + s.length;
@@ -777,14 +814,86 @@ export const specialCtrlKeys = (fileState: FileState) => ({
             }
         };
 
-        let cutCode = fileState.code.slice(0, fileState.activeCursor.pos);
-        let from = fileState.activeCursor.sorted().sel;
-        if (search(fileState.code, from)) {
+        let cutCode = this.code.slice(0, this.activeCursor.pos);
+        let from = this.activeCursor.sorted().sel;
+        if (search(this.code, from)) {
             return;
         }
         if (search(cutCode, 0)) {
             return;
         }
-        fileState.sanitizeCursors();
+        this.sanitizeCursors();
+    }
+}
+
+export const specialKeys = (
+    fileState: FileState
+): { [key: string]: (e: KeyboardEvent) => boolean | void } => ({
+    Backspace: e => {
+        fileState.backspace();
+    },
+    Delete: e => {
+        fileState.delete();
+    },
+    ArrowUp: e => {
+        fileState.cursorUp(e.shiftKey);
+    },
+    ArrowDown: e => {
+        fileState.cursorDown(e.shiftKey);
+    },
+    ArrowLeft: e => {
+        fileState.cursorLeft(e.shiftKey);
+    },
+    ArrowRight: e => {
+        fileState.cursorRight(e.shiftKey);
+    },
+    Home: e => {
+        fileState.cursorHome(e.shiftKey);
+    },
+    End: e => {
+        fileState.cursorEnd(e.shiftKey);
+    },
+    Tab: e => {
+        if (e.shiftKey) {
+            fileState.unshiftLine();
+        } else {
+            fileState.shiftLine();
+        }
+    },
+    Enter: e => {
+        fileState.enter();
+    },
+    "(": e => {
+        fileState.write_wrap("(", ")");
+    },
+    "[": e => {
+        fileState.write_wrap("[", "]");
+    },
+    "{": e => {
+        fileState.write_wrap("{", "}");
+    },
+    ")": e => {
+        fileState.write_or_pass(")");
+    },
+    "]": e => {
+        fileState.write_or_pass("]");
+    },
+    "}": e => {
+        fileState.write_or_pass("}");
+    },
+    '"': e => {
+        fileState.write_wrap('"', '"');
+    },
+    Escape: e => {
+        fileState.cursors = [fileState.mainCursor];
+        fileState.activeCursor = fileState.mainCursor;
+    },
+
+    d: e => {
+        if (e.ctrlKey) {
+            fileState.findNext();
+        } else {
+            return false;
+        }
     },
 });

@@ -1,4 +1,9 @@
-import { BlockPattern, IncludePattern, LangDef, MatchPattern } from "../lang";
+import {
+    BlockPattern,
+    IncludePattern,
+    LangDef,
+    MatchPattern,
+} from "../lang_def";
 
 let jsLang = new LangDef("JavaScript", ["js"]);
 

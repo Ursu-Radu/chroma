@@ -6,14 +6,14 @@
         EditorSettings,
         FileState,
         TextSettings,
-        specialCtrlKeys,
         specialKeys,
     } from "./editor";
     import { EMPTY_CHAR, codeDisplayStr, textSize } from "./util";
     import { highlightCode } from "./highlighting";
     import rustLang from "./langs/lang_defs/rust";
-    import { langElemStyling } from "./langs/lang";
-    import jsLang from "./langs/lang_defs/js";
+    import { langElemStyling } from "./langs/lang_def";
+    import { LANGS } from "./langs/lang_list";
+    import jsonLang from "./langs/lang_defs/json";
 
     let everything: HTMLDivElement;
     let codeRef: HTMLPreElement;
@@ -24,7 +24,6 @@
 
     let fileState = new FileState();
     const SPECIAL_KEYS = specialKeys(fileState);
-    const SPECIAL_CTRL_KEYS = specialCtrlKeys(fileState);
 
     $: cursorPos = fileState.cursors.map(c =>
         fileState.posInfo(c.pos, editorData.settings.text)
@@ -59,7 +58,7 @@
     //     JSON.stringify(fileState.getSelRects(editorData.settings.text), null, 4)
     // );
 
-    $: syntaxElements = highlightCode(fileState.code, jsLang);
+    $: syntaxElements = highlightCode(fileState.code, rustLang);
     // $: syntaxElements = [];
 </script>
 
@@ -82,16 +81,13 @@
         fileState = fileState;
     }}
     on:keydown={e => {
-        let f = undefined;
-        if (e.ctrlKey) {
-            f = SPECIAL_CTRL_KEYS[e.key];
-        } else {
-            f = SPECIAL_KEYS[e.key];
-        }
+        let f = SPECIAL_KEYS[e.key];
+        console.log(e.key);
 
         if (f != undefined) {
-            e.preventDefault();
-            f(e);
+            if (f(e) ?? true) {
+                e.preventDefault();
+            }
             fileState = fileState;
         }
     }}

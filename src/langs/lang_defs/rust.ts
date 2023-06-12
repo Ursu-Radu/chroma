@@ -1,4 +1,9 @@
-import { BlockPattern, IncludePattern, LangDef, MatchPattern } from "../lang";
+import {
+    BlockPattern,
+    IncludePattern,
+    LangDef,
+    MatchPattern,
+} from "../lang_def";
 
 let rustLang = new LangDef("Rust", ["rs"]);
 
